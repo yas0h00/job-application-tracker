@@ -1,10 +1,311 @@
 <!DOCTYPE html>
-   <html>
-   <head>
-       <title>Job Tracker</title>
-   </head>
-   <body>
-       <h1>Job Application Tracker</h1>
-       <p>Track your job applications efficiently!</p>
-   </body>
-   </html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Application Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Job Application Tracker</h1>
+            <p class="subtitle">Track your job applications and interviews in one place</p>
+        </header>
+
+        <section class="add-application">
+            <h2>Add New Application</h2>
+            <form id="applicationForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="company">Company Name *</label>
+                        <input type="text" id="company" name="company" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="position">Position *</label>
+                        <input type="text" id="position" name="position" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dateApplied">Date Applied *</label>
+                        <input type="date" id="dateApplied" name="dateApplied" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Status *</label>
+                        <select id="status" name="status" required>
+                            <option value="">Select Status</option>
+                            <option value="Applied">Applied</option>
+                            <option value="Phone Screen">Phone Screen</option>
+                            <option value="Interview Scheduled">Interview Scheduled</option>
+                            <option value="Interviewed">Interviewed</option>
+                            <option value="Offer">Offer</option>
+                            <option value="Rejected">Rejected</option>
+                            <option value="Withdrawn">Withdrawn</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" name="location" placeholder="e.g., Remote, New York, NY">
+                    </div>
+                    <div class="form-group">
+                        <label for="salary">Salary Range</label>
+                        <input type="text" id="salary" name="salary" placeholder="e.g., $80k - $100k">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Notes</label>
+                    <textarea id="notes" name="notes" rows="3" placeholder="Add any additional notes..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Add Application</button>
+            </form>
+        </section>
+
+        <section class="stats">
+            <div class="stat-card">
+                <h3>Total Applications</h3>
+                <p class="stat-number" id="totalApps">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Interviews</h3>
+                <p class="stat-number" id="totalInterviews">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Offers</h3>
+                <p class="stat-number" id="totalOffers">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Pending</h3>
+                <p class="stat-number" id="totalPending">0</p>
+            </div>
+        </section>
+
+        <section class="applications-list">
+            <div class="list-header">
+                <h2>Your Applications</h2>
+                <div class="filters">
+                    <select id="filterStatus">
+                        <option value="all">All Status</option>
+                        <option value="Applied">Applied</option>
+                        <option value="Phone Screen">Phone Screen</option>
+                        <option value="Interview Scheduled">Interview Scheduled</option>
+                        <option value="Interviewed">Interviewed</option>
+                        <option value="Offer">Offer</option>
+                        <option value="Rejected">Rejected</option>
+                        <option value="Withdrawn">Withdrawn</option>
+                    </select>
+                    <input type="text" id="searchInput" placeholder="Search companies or positions...">
+                </div>
+            </div>
+
+            <div id="applicationsList" class="applications-container">
+                <!-- Applications will be dynamically added here -->
+                <div class="empty-state">
+                    <p>No applications yet. Add your first application above!</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Sample data storage (in a real app, this would be connected to your Flask backend)
+        let applications = [];
+        let nextId = 1;
+
+        // Load applications from localStorage on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadApplications();
+            updateStats();
+            displayApplications();
+        });
+
+        // Handle form submission
+        document.getElementById('applicationForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                id: nextId++,
+                company: document.getElementById('company').value,
+                position: document.getElementById('position').value,
+                dateApplied: document.getElementById('dateApplied').value,
+                status: document.getElementById('status').value,
+                location: document.getElementById('location').value,
+                salary: document.getElementById('salary').value,
+                notes: document.getElementById('notes').value
+            };
+
+            applications.push(formData);
+            saveApplications();
+            updateStats();
+            displayApplications();
+            
+            // Reset form
+            this.reset();
+            
+            // Show success message
+            showNotification('Application added successfully!');
+        });
+
+        // Filter and search functionality
+        document.getElementById('filterStatus').addEventListener('change', displayApplications);
+        document.getElementById('searchInput').addEventListener('input', displayApplications);
+
+        function displayApplications() {
+            const filterStatus = document.getElementById('filterStatus').value;
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            
+            let filtered = applications.filter(app => {
+                const matchesStatus = filterStatus === 'all' || app.status === filterStatus;
+                const matchesSearch = app.company.toLowerCase().includes(searchTerm) || 
+                                     app.position.toLowerCase().includes(searchTerm);
+                return matchesStatus && matchesSearch;
+            });
+
+            const container = document.getElementById('applicationsList');
+            
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No applications found.</p></div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(app => `
+                <div class="application-card" data-id="${app.id}">
+                    <div class="card-header">
+                        <div>
+                            <h3>${app.company}</h3>
+                            <p class="position">${app.position}</p>
+                        </div>
+                        <span class="status-badge status-${app.status.toLowerCase().replace(/\s+/g, '-')}">${app.status}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="info-row">
+                            <span class="label">Date Applied:</span>
+                            <span>${formatDate(app.dateApplied)}</span>
+                        </div>
+                        ${app.location ? `
+                        <div class="info-row">
+                            <span class="label">Location:</span>
+                            <span>${app.location}</span>
+                        </div>
+                        ` : ''}
+                        ${app.salary ? `
+                        <div class="info-row">
+                            <span class="label">Salary:</span>
+                            <span>${app.salary}</span>
+                        </div>
+                        ` : ''}
+                        ${app.notes ? `
+                        <div class="info-row notes">
+                            <span class="label">Notes:</span>
+                            <span>${app.notes}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn-icon" onclick="editApplication(${app.id})" title="Edit">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11.333 2.00004C11.5081 1.82494 11.716 1.68605 11.9447 1.59129C12.1735 1.49653 12.4187 1.44775 12.6663 1.44775C12.914 1.44775 13.1592 1.49653 13.3879 1.59129C13.6167 1.68605 13.8246 1.82494 13.9997 2.00004C14.1748 2.17513 14.3137 2.383 14.4084 2.61178C14.5032 2.84055 14.552 3.08575 14.552 3.33337C14.552 3.58099 14.5032 3.82619 14.4084 4.05497C14.3137 4.28374 14.1748 4.49161 13.9997 4.66671L5.33301 13.3334L1.33301 14.6667L2.66634 10.6667L11.333 2.00004Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon btn-danger" onclick="deleteApplication(${app.id})" title="Delete">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M2 4H3.33333H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M5.33301 4.00004V2.66671C5.33301 2.31309 5.47348 1.97395 5.72353 1.7239C5.97358 1.47385 6.31272 1.33337 6.66634 1.33337H9.33301C9.68663 1.33337 10.0258 1.47385 10.2758 1.7239C10.5259 1.97395 10.6663 2.31309 10.6663 2.66671V4.00004M12.6663 4.00004V13.3334C12.6663 13.687 12.5259 14.0261 12.2758 14.2762C12.0258 14.5262 11.6866 14.6667 11.333 14.6667H4.66634C4.31272 14.6667 3.97358 14.5262 3.72353 14.2762C3.47348 14.0261 3.33301 13.687 3.33301 13.3334V4.00004H12.6663Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('totalApps').textContent = applications.length;
+            
+            const interviews = applications.filter(app => 
+                ['Phone Screen', 'Interview Scheduled', 'Interviewed'].includes(app.status)
+            ).length;
+            document.getElementById('totalInterviews').textContent = interviews;
+            
+            const offers = applications.filter(app => app.status === 'Offer').length;
+            document.getElementById('totalOffers').textContent = offers;
+            
+            const pending = applications.filter(app => 
+                ['Applied', 'Phone Screen', 'Interview Scheduled'].includes(app.status)
+            ).length;
+            document.getElementById('totalPending').textContent = pending;
+        }
+
+        function deleteApplication(id) {
+            if (confirm('Are you sure you want to delete this application?')) {
+                applications = applications.filter(app => app.id !== id);
+                saveApplications();
+                updateStats();
+                displayApplications();
+                showNotification('Application deleted successfully!');
+            }
+        }
+
+        function editApplication(id) {
+            const app = applications.find(a => a.id === id);
+            if (app) {
+                document.getElementById('company').value = app.company;
+                document.getElementById('position').value = app.position;
+                document.getElementById('dateApplied').value = app.dateApplied;
+                document.getElementById('status').value = app.status;
+                document.getElementById('location').value = app.location;
+                document.getElementById('salary').value = app.salary;
+                document.getElementById('notes').value = app.notes;
+                
+                // Delete the old entry
+                deleteApplication(id);
+                
+                // Scroll to form
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function formatDate(dateString) {
+            const options = { year: 'numeric', month: 'short', day: 'numeric' };
+            return new Date(dateString).toLocaleDateString('en-US', options);
+        }
+
+        function saveApplications() {
+            localStorage.setItem('jobApplications', JSON.stringify(applications));
+            localStorage.setItem('nextId', nextId);
+        }
+
+        function loadApplications() {
+            const saved = localStorage.getItem('jobApplications');
+            if (saved) {
+                applications = JSON.parse(saved);
+            }
+            const savedId = localStorage.getItem('nextId');
+            if (savedId) {
+                nextId = parseInt(savedId);
+            }
+        }
+
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
