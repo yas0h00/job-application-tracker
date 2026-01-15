@@ -13,3 +13,4 @@ typing_extensions==4.15.0
 Werkzeug==3.1.5
 reportlab==4.0.7
 gunicorn==21.2.0
+Flask-Migrate==4.0.5
