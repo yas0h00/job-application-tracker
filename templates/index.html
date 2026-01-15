@@ -1,21 +1,234 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Application Tracker</title>
+    <title>Dashboard - Job Application Tracker</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .dashboard-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--surface);
+            padding: 1rem 2rem;
+            margin: -2rem -2rem 2rem -2rem;
+            border-radius: 12px 12px 0 0;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .greeting {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .greeting h2 {
+            font-size: 1.1rem;
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .greeting p {
+            font-size: 0.85rem;
+            margin: 0;
+            color: var(--text-secondary);
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn-secondary {
+            background-color: var(--background);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border-color);
+        }
+
+        .export-dropdown {
+            position: relative;
+        }
+
+        .export-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
+            min-width: 150px;
+            display: none;
+            z-index: 100;
+        }
+
+        .export-menu.show {
+            display: block;
+        }
+
+        .export-menu a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: background-color 0.2s;
+        }
+
+        .export-menu a:hover {
+            background-color: var(--background);
+        }
+
+        .export-menu a:first-child {
+            border-radius: 8px 8px 0 0;
+        }
+
+        .export-menu a:last-child {
+            border-radius: 0 0 8px 8px;
+        }
+
+        .quick-stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .quick-stat {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+            color: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .quick-stat h4 {
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            opacity: 0.9;
+        }
+
+        .quick-stat .number {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .section-header h2 {
+            margin: 0;
+        }
+
+        .toggle-form-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-collapsed {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-nav {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+
+            .nav-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Job Application Tracker</h1>
-            <p class="subtitle">Track your job applications and interviews in one place</p>
-        </header>
+    <!-- Dark Mode Toggle Button -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+        <svg id="themeIcon" viewBox="0 0 24 24">
+            <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+    </button>
 
-        <section class="add-application">
-            <h2>Add New Application</h2>
-            <form id="applicationForm">
+    <div class="container">
+        <div class="dashboard-nav">
+            <div class="user-info">
+                <div class="user-avatar">
+                    {{ current_user.first_name[0] }}{{ current_user.last_name[0] }}
+                </div>
+                <div class="greeting">
+                    <h2>Welcome back, {{ current_user.first_name }}! 👋</h2>
+                    <p>Track and manage your job applications</p>
+                </div>
+            </div>
+            <div class="nav-actions">
+                <div class="export-dropdown">
+                    <button class="btn btn-secondary" onclick="toggleExportMenu()" id="exportBtn">
+                        Export ▼
+                    </button>
+                    <div class="export-menu" id="exportMenu">
+                        <a href="{{ url_for('export_csv') }}">📄 Export as CSV</a>
+                        <a href="{{ url_for('export_pdf') }}">📑 Export as PDF</a>
+                    </div>
+                </div>
+                <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="text-decoration: none;">Logout</a>
+            </div>
+        </div>
+
+        <div class="quick-stats-row">
+            <div class="quick-stat">
+                <h4>This Week</h4>
+                <div class="number" id="weekApps">0</div>
+            </div>
+            <div class="quick-stat" style="background: linear-gradient(135deg, #10b981, #059669);">
+                <h4>Response Rate</h4>
+                <div class="number" id="responseRate">0%</div>
+            </div>
+            <div class="quick-stat" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                <h4>Active Applications</h4>
+                <div class="number" id="activeApps">0</div>
+            </div>
+        </div>
+
+        <section class="add-application" id="addApplicationSection">
+            <div class="section-header">
+                <h2>Add New Application</h2>
+                <button class="btn btn-secondary toggle-form-btn" onclick="toggleForm()">
+                    <span id="toggleIcon">−</span> <span id="toggleText">Collapse</span>
+                </button>
+            </div>
+            <form id="applicationForm" class="auth-form">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="company">Company Name *</label>
@@ -63,7 +276,9 @@
                     <textarea id="notes" name="notes" rows="3" placeholder="Add any additional notes..."></textarea>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Add Application</button>
+                <button type="submit" class="btn btn-primary">
+                    <span id="submitBtnText">Add Application</span>
+                </button>
             </form>
         </section>
 
@@ -105,32 +320,101 @@
             </div>
 
             <div id="applicationsList" class="applications-container">
-                <!-- Applications will be dynamically added here -->
                 <div class="empty-state">
-                    <p>No applications yet. Add your first application above!</p>
+                    <p>Loading applications...</p>
                 </div>
             </div>
         </section>
     </div>
 
     <script>
-        // Sample data storage (in a real app, this would be connected to your Flask backend)
         let applications = [];
-        let nextId = 1;
+        let editingId = null;
 
-        // Load applications from localStorage on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadApplications();
-            updateStats();
-            displayApplications();
+        // Dark mode functionality
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
+
+        function updateThemeIcon(theme) {
+            const icon = document.getElementById('themeIcon');
+            if (theme === 'dark') {
+                icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
+            } else {
+                icon.innerHTML = '<path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
+            }
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+
+        // Export menu functionality
+        function toggleExportMenu() {
+            const menu = document.getElementById('exportMenu');
+            menu.classList.toggle('show');
+        }
+
+        // Close export menu when clicking outside
+        document.addEventListener('click', function(e) {
+            const exportBtn = document.getElementById('exportBtn');
+            const exportMenu = document.getElementById('exportMenu');
+            if (!exportBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+                exportMenu.classList.remove('show');
+            }
         });
 
-        // Handle form submission
-        document.getElementById('applicationForm').addEventListener('submit', function(e) {
+        document.addEventListener('DOMContentLoaded', function() {
+            loadApplications();
+            setDefaultDate();
+        });
+
+        function setDefaultDate() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('dateApplied').value = today;
+        }
+
+        function toggleForm() {
+            const form = document.getElementById('applicationForm');
+            const icon = document.getElementById('toggleIcon');
+            const text = document.getElementById('toggleText');
+            
+            if (form.classList.contains('form-collapsed')) {
+                form.classList.remove('form-collapsed');
+                icon.textContent = '−';
+                text.textContent = 'Collapse';
+            } else {
+                form.classList.add('form-collapsed');
+                icon.textContent = '+';
+                text.textContent = 'Expand';
+            }
+        }
+
+        async function loadApplications() {
+            try {
+                const response = await fetch('/api/applications');
+                if (response.ok) {
+                    applications = await response.json();
+                    updateStats();
+                    updateQuickStats();
+                    displayApplications();
+                }
+            } catch (error) {
+                console.error('Error loading applications:', error);
+                showNotification('Error loading applications', 'error');
+            }
+        }
+
+        document.getElementById('applicationForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const formData = {
-                id: nextId++,
                 company: document.getElementById('company').value,
                 position: document.getElementById('position').value,
                 dateApplied: document.getElementById('dateApplied').value,
@@ -140,19 +424,42 @@
                 notes: document.getElementById('notes').value
             };
 
-            applications.push(formData);
-            saveApplications();
-            updateStats();
-            displayApplications();
-            
-            // Reset form
-            this.reset();
-            
-            // Show success message
-            showNotification('Application added successfully!');
+            try {
+                let response;
+                if (editingId) {
+                    response = await fetch(`/api/applications/${editingId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                    editingId = null;
+                    document.getElementById('submitBtnText').textContent = 'Add Application';
+                } else {
+                    response = await fetch('/api/applications', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                }
+
+                if (response.ok) {
+                    await loadApplications();
+                    this.reset();
+                    setDefaultDate();
+                    showNotification('Application saved successfully!');
+                } else {
+                    showNotification('Error saving application', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error saving application', 'error');
+            }
         });
 
-        // Filter and search functionality
         document.getElementById('filterStatus').addEventListener('change', displayApplications);
         document.getElementById('searchInput').addEventListener('input', displayApplications);
 
@@ -170,7 +477,7 @@
             const container = document.getElementById('applicationsList');
             
             if (filtered.length === 0) {
-                container.innerHTML = '<div class="empty-state"><p>No applications found.</p></div>';
+                container.innerHTML = '<div class="empty-state"><p>No applications found. Start by adding your first application!</p></div>';
                 return;
             }
 
@@ -241,13 +548,45 @@
             document.getElementById('totalPending').textContent = pending;
         }
 
-        function deleteApplication(id) {
+        function updateQuickStats() {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            
+            const weekApps = applications.filter(app => {
+                const appDate = new Date(app.dateApplied);
+                return appDate >= oneWeekAgo;
+            }).length;
+            document.getElementById('weekApps').textContent = weekApps;
+
+            const responses = applications.filter(app => 
+                ['Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offer'].includes(app.status)
+            ).length;
+            const rate = applications.length > 0 ? Math.round((responses / applications.length) * 100) : 0;
+            document.getElementById('responseRate').textContent = rate + '%';
+
+            const active = applications.filter(app => 
+                !['Rejected', 'Withdrawn'].includes(app.status)
+            ).length;
+            document.getElementById('activeApps').textContent = active;
+        }
+
+        async function deleteApplication(id) {
             if (confirm('Are you sure you want to delete this application?')) {
-                applications = applications.filter(app => app.id !== id);
-                saveApplications();
-                updateStats();
-                displayApplications();
-                showNotification('Application deleted successfully!');
+                try {
+                    const response = await fetch(`/api/applications/${id}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        await loadApplications();
+                        showNotification('Application deleted successfully!');
+                    } else {
+                        showNotification('Error deleting application', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showNotification('Error deleting application', 'error');
+                }
             }
         }
 
@@ -258,14 +597,18 @@
                 document.getElementById('position').value = app.position;
                 document.getElementById('dateApplied').value = app.dateApplied;
                 document.getElementById('status').value = app.status;
-                document.getElementById('location').value = app.location;
-                document.getElementById('salary').value = app.salary;
-                document.getElementById('notes').value = app.notes;
+                document.getElementById('location').value = app.location || '';
+                document.getElementById('salary').value = app.salary || '';
+                document.getElementById('notes').value = app.notes || '';
                 
-                // Delete the old entry
-                deleteApplication(id);
+                editingId = id;
+                document.getElementById('submitBtnText').textContent = 'Update Application';
                 
-                // Scroll to form
+                const form = document.getElementById('applicationForm');
+                if (form.classList.contains('form-collapsed')) {
+                    toggleForm();
+                }
+                
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         }
@@ -275,25 +618,12 @@
             return new Date(dateString).toLocaleDateString('en-US', options);
         }
 
-        function saveApplications() {
-            localStorage.setItem('jobApplications', JSON.stringify(applications));
-            localStorage.setItem('nextId', nextId);
-        }
-
-        function loadApplications() {
-            const saved = localStorage.getItem('jobApplications');
-            if (saved) {
-                applications = JSON.parse(saved);
-            }
-            const savedId = localStorage.getItem('nextId');
-            if (savedId) {
-                nextId = parseInt(savedId);
-            }
-        }
-
-        function showNotification(message) {
+        function showNotification(message, type = 'success') {
             const notification = document.createElement('div');
             notification.className = 'notification';
+            if (type === 'error') {
+                notification.style.backgroundColor = 'var(--danger-color)';
+            }
             notification.textContent = message;
             document.body.appendChild(notification);
             

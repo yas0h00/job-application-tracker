@@ -15,10 +15,28 @@
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
+[data-theme="dark"] {
+    --primary-color: #6366f1;
+    --primary-hover: #4f46e5;
+    --secondary-color: #94a3b8;
+    --success-color: #34d399;
+    --warning-color: #fbbf24;
+    --danger-color: #f87171;
+    --background: #0f172a;
+    --surface: #1e293b;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border-color: #334155;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+}
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 body {
@@ -32,6 +50,35 @@ body {
     max-width: 1200px;
     margin: 0 auto;
     padding: 2rem;
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    transition: transform 0.2s;
+}
+
+.theme-toggle:hover {
+    transform: scale(1.1);
+}
+
+.theme-toggle svg {
+    width: 24px;
+    height: 24px;
+    fill: white;
 }
 
 header {
@@ -95,6 +142,8 @@ header h1 {
     border-radius: 8px;
     font-size: 1rem;
     font-family: inherit;
+    background-color: var(--surface);
+    color: var(--text-primary);
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -221,6 +270,8 @@ header h1 {
     border-radius: 8px;
     font-size: 0.9rem;
     font-family: inherit;
+    background-color: var(--surface);
+    color: var(--text-primary);
 }
 
 .filters select {
@@ -286,9 +337,19 @@ header h1 {
     color: #1e40af;
 }
 
+[data-theme="dark"] .status-applied {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+}
+
 .status-phone-screen {
     background-color: #fef3c7;
     color: #92400e;
+}
+
+[data-theme="dark"] .status-phone-screen {
+    background-color: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
 }
 
 .status-interview-scheduled {
@@ -296,9 +357,19 @@ header h1 {
     color: #3730a3;
 }
 
+[data-theme="dark"] .status-interview-scheduled {
+    background-color: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+}
+
 .status-interviewed {
     background-color: #ddd6fe;
     color: #5b21b6;
+}
+
+[data-theme="dark"] .status-interviewed {
+    background-color: rgba(139, 92, 246, 0.2);
+    color: #c4b5fd;
 }
 
 .status-offer {
@@ -306,14 +377,29 @@ header h1 {
     color: #065f46;
 }
 
+[data-theme="dark"] .status-offer {
+    background-color: rgba(52, 211, 153, 0.2);
+    color: #6ee7b7;
+}
+
 .status-rejected {
     background-color: #fee2e2;
     color: #991b1b;
 }
 
+[data-theme="dark"] .status-rejected {
+    background-color: rgba(248, 113, 113, 0.2);
+    color: #fca5a5;
+}
+
 .status-withdrawn {
     background-color: #f3f4f6;
     color: #4b5563;
+}
+
+[data-theme="dark"] .status-withdrawn {
+    background-color: rgba(156, 163, 175, 0.2);
+    color: #d1d5db;
 }
 
 /* Card Body */
@@ -415,6 +501,13 @@ header h1 {
 
     .status-badge {
         align-self: flex-start;
+    }
+
+    .theme-toggle {
+        bottom: 1rem;
+        left: 1rem;
+        width: 45px;
+        height: 45px;
     }
 }
 
