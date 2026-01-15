@@ -291,9 +291,9 @@ This project is open source and available under the [MIT License](LICENSE).
 **Yash Khobragade**
 
 - 🐙 GitHub: [@yas0h00](https://github.com/yas0h00)
-- 💼 LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/your-profile) 
-- 🌐 Portfolio: [Your Portfolio](https://your-portfolio.com)
-- 📧 Email: your.email@example.com
+- 💼 LinkedIn: [Yash kamble](linkedin.com/in/yash-kamble-37b8722a6) 
+- 🌐 Portfolio:
+- 📧 Email: yashkamble607@gmail.com
 
 ---
 
