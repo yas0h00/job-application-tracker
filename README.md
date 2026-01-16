@@ -68,11 +68,12 @@ Try it out! Create an account and explore all features.
 ## 🛠️ Tech Stack
 
 **Backend:**
-- Flask 3.1.2 - Web framework
-- SQLAlchemy 2.0 - ORM for database operations
-- Flask-Login - User session management
-- Flask-Migrate - Database migrations
-- Werkzeug - Password hashing & security
+-Framework: Flask (Python)
+-Database: PostgreSQL (Production) / SQLite (Development)
+-ORM: SQLAlchemy
+-Authentication: Flask-Login
+-Password Security: Werkzeug (bcrypt hashing)
+-Migration: Flask-Migrate
 
 **Frontend:**
 - HTML5, CSS3, JavaScript (Vanilla)
