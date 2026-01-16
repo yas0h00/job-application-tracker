@@ -68,12 +68,12 @@ Try it out! Create an account and explore all features.
 ## 🛠️ Tech Stack
 
 **Backend:**
--Framework: Flask (Python)
--Database: PostgreSQL (Production) / SQLite (Development)
--ORM: SQLAlchemy
--Authentication: Flask-Login
--Password Security: Werkzeug (bcrypt hashing)
--Migration: Flask-Migrate
+- Framework: Flask (Python)
+- Database: PostgreSQL (Production) / SQLite (Development)
+- ORM: SQLAlchemy
+- Authentication: Flask-Login
+- Password Security: Werkzeug (bcrypt hashing)
+- Migration: Flask-Migrate
 
 **Frontend:**
 - HTML5, CSS3, JavaScript (Vanilla)
@@ -191,7 +191,7 @@ Building this project taught me:
 
 **Backend Development:**
 - RESTful API design and implementation
-- Database relationships and ORM usage
+- Database: PostgreSQL (Production) / SQLite (Development)
 - User authentication and session management
 - File generation (CSV, PDF) in memory
 
