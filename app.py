@@ -8,7 +8,7 @@ import os
 import csv
 import io
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -21,25 +21,17 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-i
 
 # Database configuration
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///job_tracker.db')
-
-# Fix for Render's postgres:// vs postgresql:// issue
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# PostgreSQL connection settings for Render
+# Simplified PostgreSQL settings
 if database_url.startswith('postgresql://'):
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_pre_ping': True,
         'pool_recycle': 300,
-        'pool_size': 10,
-        'max_overflow': 20,
-        'connect_args': {
-            'connect_timeout': 10,
-            'options': '-c statement_timeout=30000'
-        }
     }
 
 # Email Configuration
@@ -59,9 +51,6 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 
-with app.app_context():
-    db.create_all()
-
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -72,7 +61,7 @@ def get_serializer():
 def send_password_reset_email(user_email, reset_url):
     """Send password reset email to user"""
     if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
-        print("WARNING: Email not configured. Set MAIL_USERNAME and MAIL_PASSWORD environment variables.")
+        print("WARNING: Email not configured")
         return False
     
     try:
@@ -92,21 +81,19 @@ def send_password_reset_email(user_email, reset_url):
                         <p>Or copy and paste this link into your browser:</p>
                         <p style="background-color: #f3f4f6; padding: 10px; border-radius: 5px; word-break: break-all;">{reset_url}</p>
                         <p><strong>This link will expire in 1 hour.</strong></p>
-                        <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
+                        <p>If you didn't request a password reset, please ignore this email.</p>
                         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-                        <p style="font-size: 12px; color: #6b7280;">This is an automated message from Job Application Tracker. Please do not reply to this email.</p>
+                        <p style="font-size: 12px; color: #6b7280;">This is an automated message from Job Application Tracker.</p>
                     </div>
                 </body>
             </html>
             '''
         )
         mail.send(msg)
-        print(f"Password reset email sent successfully to {user_email}")
+        print(f"✅ Password reset email sent to {user_email}")
         return True
     except Exception as e:
-        print(f"Error sending email: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Error sending email: {e}")
         return False
 
 # Routes
@@ -156,13 +143,8 @@ def signup():
             flash('Email already registered', 'error')
             return render_template('signup.html')
         
-        user = User(
-            first_name=first_name,
-            last_name=last_name,
-            email=email
-        )
+        user = User(first_name=first_name, last_name=last_name, email=email)
         user.set_password(password)
-        
         db.session.add(user)
         db.session.commit()
         
@@ -178,7 +160,6 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
-# API Routes for Applications
 @app.route('/api/applications', methods=['GET'])
 @login_required
 def get_applications():
@@ -189,7 +170,6 @@ def get_applications():
 @login_required
 def create_application():
     data = request.get_json()
-    
     application = Application(
         user_id=current_user.id,
         company=data['company'],
@@ -200,10 +180,8 @@ def create_application():
         salary=data.get('salary', ''),
         notes=data.get('notes', '')
     )
-    
     db.session.add(application)
     db.session.commit()
-    
     return jsonify(application.to_dict()), 201
 
 @app.route('/api/applications/<int:app_id>', methods=['PUT'])
@@ -211,7 +189,6 @@ def create_application():
 def update_application(app_id):
     application = Application.query.filter_by(id=app_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
-    
     application.company = data['company']
     application.position = data['position']
     application.date_applied = datetime.strptime(data['dateApplied'], '%Y-%m-%d').date()
@@ -219,130 +196,79 @@ def update_application(app_id):
     application.location = data.get('location', '')
     application.salary = data.get('salary', '')
     application.notes = data.get('notes', '')
-    
     db.session.commit()
-    
     return jsonify(application.to_dict())
 
 @app.route('/api/applications/<int:app_id>', methods=['DELETE'])
 @login_required
 def delete_application(app_id):
     application = Application.query.filter_by(id=app_id, user_id=current_user.id).first_or_404()
-    
     db.session.delete(application)
     db.session.commit()
-    
     return '', 204
 
-# Export Routes
 @app.route('/export/csv')
 @login_required
 def export_csv():
-    """Export user's applications to CSV"""
     applications = Application.query.filter_by(user_id=current_user.id).all()
-    
     output = io.StringIO()
     writer = csv.writer(output)
-    
     writer.writerow(['Company', 'Position', 'Date Applied', 'Status', 'Location', 'Salary', 'Notes', 'Created At'])
-    
     for app in applications:
         writer.writerow([
-            app.company,
-            app.position,
-            app.date_applied.strftime('%Y-%m-%d'),
-            app.status,
-            app.location or '',
-            app.salary or '',
-            app.notes or '',
+            app.company, app.position, app.date_applied.strftime('%Y-%m-%d'),
+            app.status, app.location or '', app.salary or '', app.notes or '',
             app.created_at.strftime('%Y-%m-%d %H:%M:%S')
         ])
-    
     output.seek(0)
     response = make_response(output.getvalue())
     response.headers['Content-Disposition'] = f'attachment; filename=job_applications_{datetime.now().strftime("%Y%m%d")}.csv'
     response.headers['Content-Type'] = 'text/csv'
-    
     return response
 
 @app.route('/export/pdf')
 @login_required
 def export_pdf():
-    """Export user's applications to PDF"""
     applications = Application.query.filter_by(user_id=current_user.id).all()
-    
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     elements = []
-    
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#4f46e5'),
-        spaceAfter=30,
-    )
-    
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24,
+                                 textColor=colors.HexColor('#4f46e5'), spaceAfter=30)
     title = Paragraph(f"Job Applications Report - {current_user.full_name}", title_style)
     elements.append(title)
-    
     date_text = Paragraph(f"Generated on {datetime.now().strftime('%B %d, %Y')}", styles['Normal'])
     elements.append(date_text)
     elements.append(Spacer(1, 0.5*inch))
-    
     total = len(applications)
     interviews = len([a for a in applications if a.status in ['Phone Screen', 'Interview Scheduled', 'Interviewed']])
     offers = len([a for a in applications if a.status == 'Offer'])
-    
-    summary = Paragraph(f"<b>Summary:</b> {total} Total Applications | {interviews} Interviews | {offers} Offers", styles['Normal'])
+    summary = Paragraph(f"<b>Summary:</b> {total} Total | {interviews} Interviews | {offers} Offers", styles['Normal'])
     elements.append(summary)
     elements.append(Spacer(1, 0.3*inch))
-    
     if applications:
         data = [['Company', 'Position', 'Date Applied', 'Status']]
-        
         for app in applications:
-            data.append([
-                app.company,
-                app.position,
-                app.date_applied.strftime('%Y-%m-%d'),
-                app.status
-            ])
-        
+            data.append([app.company, app.position, app.date_applied.strftime('%Y-%m-%d'), app.status])
         table = Table(data, colWidths=[2*inch, 2.5*inch, 1.5*inch, 1.5*inch])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
         ]))
-        
         elements.append(table)
-    else:
-        elements.append(Paragraph("No applications found.", styles['Normal']))
-    
     doc.build(elements)
     buffer.seek(0)
-    
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=f'job_applications_{datetime.now().strftime("%Y%m%d")}.pdf',
-        mimetype='application/pdf'
-    )
+    return send_file(buffer, as_attachment=True,
+                    download_name=f'job_applications_{datetime.now().strftime("%Y%m%d")}.pdf',
+                    mimetype='application/pdf')
 
-# Password Reset Routes
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    """Request password reset"""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
     
@@ -354,7 +280,6 @@ def forgot_password():
             serializer = get_serializer()
             token = serializer.dumps(user.email, salt='password-reset-salt')
             reset_url = url_for('reset_password', token=token, _external=True)
-            
             email_sent = send_password_reset_email(user.email, reset_url)
             
             if email_sent:
@@ -370,7 +295,6 @@ def forgot_password():
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    """Reset password with token"""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
     
@@ -404,7 +328,6 @@ def reset_password(token):
 @app.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
-    """Change password for logged-in user"""
     if request.method == 'POST':
         current_password = request.form.get('currentPassword')
         new_password = request.form.get('newPassword')
