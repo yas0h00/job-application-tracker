@@ -1,6 +1,7 @@
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_mail import Mail, Message  # ✅ Add Flask-Mail
 from models import db, User, Application
 from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime
@@ -14,12 +15,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from flask_migrate import Migrate
 
-app = Flask(__name__)  # ✅ Create app first
+app = Flask(__name__)
 
 # Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Database configuration - use PostgreSQL in production, SQLite for local dev
+# Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///job_tracker.db')
 
 # Fix for Render's postgres:// vs postgresql:// issue
@@ -27,13 +28,23 @@ if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# ✅ Email Configuration (REQUIRED FOR PASSWORD RESET)
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True') == 'True'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')  # Your email
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')  # Your email password or app password
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config['MAIL_USERNAME'])
+
 # Initialize extensions
 db.init_app(app)
-migrate = Migrate(app, db)  # ✅ Now initialize migrate after app exists
+migrate = Migrate(app, db)
+mail = Mail(app)  # ✅ Initialize Flask-Mail
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
+
 with app.app_context():
     db.create_all()
 
@@ -44,6 +55,42 @@ def load_user(user_id):
 # Create database tables
 with app.app_context():
     db.create_all()
+
+def get_serializer():
+    return URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
+def send_password_reset_email(user_email, reset_url):
+    """Send password reset email to user"""
+    try:
+        msg = Message(
+            subject='Password Reset Request - Job Application Tracker',
+            recipients=[user_email],
+            html=f'''
+            <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                        <h2 style="color: #4f46e5;">Password Reset Request</h2>
+                        <p>Hello,</p>
+                        <p>You recently requested to reset your password for your Job Application Tracker account. Click the button below to reset it:</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{reset_url}" style="background-color: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
+                        </div>
+                        <p>Or copy and paste this link into your browser:</p>
+                        <p style="background-color: #f3f4f6; padding: 10px; border-radius: 5px; word-break: break-all;">{reset_url}</p>
+                        <p><strong>This link will expire in 1 hour.</strong></p>
+                        <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
+                        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+                        <p style="font-size: 12px; color: #6b7280;">This is an automated message from Job Application Tracker. Please do not reply to this email.</p>
+                    </div>
+                </body>
+            </html>
+            '''
+        )
+        mail.send(msg)
+        return True
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
 
 # Routes
 @app.route('/')
@@ -287,8 +334,6 @@ def export_pdf():
         download_name=f'job_applications_{datetime.now().strftime("%Y%m%d")}.pdf',
         mimetype='application/pdf'
     )
-def get_serializer():
-    return URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 # Password Reset Routes
 @app.route('/forgot-password', methods=['GET', 'POST'])
@@ -306,17 +351,16 @@ def forgot_password():
             serializer = get_serializer()
             token = serializer.dumps(user.email, salt='password-reset-salt')
             
-            # In production, send email here
-            # For now, we'll just show the reset link
+            # Generate reset URL
             reset_url = url_for('reset_password', token=token, _external=True)
             
-            # For development: flash the link
-            flash(f'Password reset link (in production this would be emailed): {reset_url}', 'info')
+            # ✅ Send the actual email
+            email_sent = send_password_reset_email(user.email, reset_url)
             
-            # For production: Send email with reset_url
-            # send_password_reset_email(user.email, reset_url)
-            
-            flash('If an account exists with that email, a password reset link has been sent.', 'success')
+            if email_sent:
+                flash('If an account exists with that email, a password reset link has been sent.', 'success')
+            else:
+                flash('There was an error sending the email. Please try again later or contact support.', 'error')
         else:
             # Don't reveal if email exists or not (security best practice)
             flash('If an account exists with that email, a password reset link has been sent.', 'success')
