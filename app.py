@@ -1,7 +1,6 @@
-
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_mail import Mail, Message  # ✅ Add Flask-Mail
+from flask_mail import Mail, Message
 from models import db, User, Application
 from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime
@@ -21,34 +20,40 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///job_tracker.db')
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///job_tracker.db')
 
 # Fix for Render's postgres:// vs postgresql:// issue
-if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
-    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://', 1)
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
-# Fix for PostgreSQL SSL connection issues on Render
-if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# PostgreSQL connection settings for Render
+if database_url.startswith('postgresql://'):
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+        'pool_size': 10,
+        'max_overflow': 20,
         'connect_args': {
-            'sslmode': 'require'
+            'connect_timeout': 10,
+            'options': '-c statement_timeout=30000'
         }
     }
 
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# ✅ Email Configuration (REQUIRED FOR PASSWORD RESET)
+# Email Configuration
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True') == 'True'
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')  # Your email
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')  # Your email password or app password
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', app.config['MAIL_USERNAME'])
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', os.environ.get('MAIL_USERNAME'))
 
 # Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)
-mail = Mail(app)  # ✅ Initialize Flask-Mail
+mail = Mail(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -61,15 +66,15 @@ with app.app_context():
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Create database tables
-with app.app_context():
-    db.create_all()
-
 def get_serializer():
     return URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 def send_password_reset_email(user_email, reset_url):
     """Send password reset email to user"""
+    if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
+        print("WARNING: Email not configured. Set MAIL_USERNAME and MAIL_PASSWORD environment variables.")
+        return False
+    
     try:
         msg = Message(
             subject='Password Reset Request - Job Application Tracker',
@@ -96,9 +101,12 @@ def send_password_reset_email(user_email, reset_url):
             '''
         )
         mail.send(msg)
+        print(f"Password reset email sent successfully to {user_email}")
         return True
     except Exception as e:
         print(f"Error sending email: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 # Routes
@@ -140,7 +148,6 @@ def signup():
         password = request.form.get('password')
         confirm_password = request.form.get('confirmPassword')
         
-        # Validation
         if password != confirm_password:
             flash('Passwords do not match', 'error')
             return render_template('signup.html')
@@ -149,7 +156,6 @@ def signup():
             flash('Email already registered', 'error')
             return render_template('signup.html')
         
-        # Create new user
         user = User(
             first_name=first_name,
             last_name=last_name,
@@ -235,14 +241,11 @@ def export_csv():
     """Export user's applications to CSV"""
     applications = Application.query.filter_by(user_id=current_user.id).all()
     
-    # Create CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write header
     writer.writerow(['Company', 'Position', 'Date Applied', 'Status', 'Location', 'Salary', 'Notes', 'Created At'])
     
-    # Write data
     for app in applications:
         writer.writerow([
             app.company,
@@ -255,7 +258,6 @@ def export_csv():
             app.created_at.strftime('%Y-%m-%d %H:%M:%S')
         ])
     
-    # Create response
     output.seek(0)
     response = make_response(output.getvalue())
     response.headers['Content-Disposition'] = f'attachment; filename=job_applications_{datetime.now().strftime("%Y%m%d")}.csv'
@@ -269,12 +271,10 @@ def export_pdf():
     """Export user's applications to PDF"""
     applications = Application.query.filter_by(user_id=current_user.id).all()
     
-    # Create PDF in memory
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     elements = []
     
-    # Styles
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         'CustomTitle',
@@ -284,16 +284,13 @@ def export_pdf():
         spaceAfter=30,
     )
     
-    # Title
     title = Paragraph(f"Job Applications Report - {current_user.full_name}", title_style)
     elements.append(title)
     
-    # Date
     date_text = Paragraph(f"Generated on {datetime.now().strftime('%B %d, %Y')}", styles['Normal'])
     elements.append(date_text)
     elements.append(Spacer(1, 0.5*inch))
     
-    # Summary statistics
     total = len(applications)
     interviews = len([a for a in applications if a.status in ['Phone Screen', 'Interview Scheduled', 'Interviewed']])
     offers = len([a for a in applications if a.status == 'Offer'])
@@ -302,7 +299,6 @@ def export_pdf():
     elements.append(summary)
     elements.append(Spacer(1, 0.3*inch))
     
-    # Applications table
     if applications:
         data = [['Company', 'Position', 'Date Applied', 'Status']]
         
@@ -333,7 +329,6 @@ def export_pdf():
     else:
         elements.append(Paragraph("No applications found.", styles['Normal']))
     
-    # Build PDF
     doc.build(elements)
     buffer.seek(0)
     
@@ -356,22 +351,17 @@ def forgot_password():
         user = User.query.filter_by(email=email).first()
         
         if user:
-            # Generate reset token
             serializer = get_serializer()
             token = serializer.dumps(user.email, salt='password-reset-salt')
-            
-            # Generate reset URL
             reset_url = url_for('reset_password', token=token, _external=True)
             
-            # ✅ Send the actual email
             email_sent = send_password_reset_email(user.email, reset_url)
             
             if email_sent:
                 flash('If an account exists with that email, a password reset link has been sent.', 'success')
             else:
-                flash('There was an error sending the email. Please try again later or contact support.', 'error')
+                flash('There was an error sending the email. Please try again later.', 'error')
         else:
-            # Don't reveal if email exists or not (security best practice)
             flash('If an account exists with that email, a password reset link has been sent.', 'success')
         
         return redirect(url_for('login'))
@@ -386,7 +376,7 @@ def reset_password(token):
     
     try:
         serializer = get_serializer()
-        email = serializer.loads(token, salt='password-reset-salt', max_age=3600)  # 1 hour expiry
+        email = serializer.loads(token, salt='password-reset-salt', max_age=3600)
     except:
         flash('The password reset link is invalid or has expired.', 'error')
         return redirect(url_for('forgot_password'))
