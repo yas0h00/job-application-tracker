@@ -26,6 +26,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 # Fix for Render's postgres:// vs postgresql:// issue
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://', 1)
+
+# Fix for PostgreSQL SSL connection issues on Render
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {
+            'sslmode': 'require'
+        }
+    }
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # ✅ Email Configuration (REQUIRED FOR PASSWORD RESET)
