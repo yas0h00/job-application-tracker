@@ -8,88 +8,50 @@ import os
 import csv
 import io
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from flask_migrate import Migrate
 
 app = Flask(__name__)
-
-# Configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-
-# Database configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///job_tracker.db')
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
-
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Email Configuration
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True, 'pool_recycle': 300}
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
-app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True') == 'True'
+app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', os.environ.get('MAIL_USERNAME'))
 
-# Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)
 mail = Mail(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message = 'Please log in to access this page.'
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-def get_serializer():
-    return URLSafeTimedSerializer(app.config['SECRET_KEY'])
-
 def send_password_reset_email(user_email, reset_url):
-    """Send password reset email to user"""
-    if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
-        print("WARNING: Email not configured. Set MAIL_USERNAME and MAIL_PASSWORD.")
+    if not app.config['MAIL_USERNAME']:
         return False
-    
     try:
-        msg = Message(
-            subject='Password Reset Request - Job Application Tracker',
-            recipients=[user_email],
-            html=f'''
-            <html>
-                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                        <h2 style="color: #4f46e5;">Password Reset Request</h2>
-                        <p>Hello,</p>
-                        <p>You recently requested to reset your password for your Job Application Tracker account. Click the button below to reset it:</p>
-                        <div style="text-align: center; margin: 30px 0;">
-                            <a href="{reset_url}" style="background-color: #4f46e5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-                        </div>
-                        <p>Or copy and paste this link into your browser:</p>
-                        <p style="background-color: #f3f4f6; padding: 10px; border-radius: 5px; word-break: break-all;">{reset_url}</p>
-                        <p><strong>This link will expire in 1 hour.</strong></p>
-                        <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
-                        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-                        <p style="font-size: 12px; color: #6b7280;">This is an automated message from Job Application Tracker. Please do not reply to this email.</p>
-                    </div>
-                </body>
-            </html>
-            '''
-        )
+        msg = Message('Password Reset - Job Tracker', recipients=[user_email],
+                     html=f'<p>Reset your password: <a href="{reset_url}">Click here</a></p><p>Link expires in 1 hour.</p>')
         mail.send(msg)
-        print(f"✅ Password reset email sent successfully to {user_email}")
         return True
     except Exception as e:
-        print(f"❌ Error sending email: {e}")
+        print(f"Email error: {e}")
         return False
 
-# Routes
 @app.route('/')
 @login_required
 def home():
@@ -99,329 +61,150 @@ def home():
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('home'))
-    
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        remember = request.form.get('remember') == 'on'
-        
-        user = User.query.filter_by(email=email).first()
-        
-        if user and user.check_password(password):
-            login_user(user, remember=remember)
-            next_page = request.args.get('next')
-            return redirect(next_page) if next_page else redirect(url_for('home'))
-        else:
-            flash('Invalid email or password', 'error')
-    
+        user = User.query.filter_by(email=request.form.get('email')).first()
+        if user and user.check_password(request.form.get('password')):
+            login_user(user, remember=request.form.get('remember')=='on')
+            return redirect(request.args.get('next') or url_for('home'))
+        flash('Invalid email or password', 'error')
     return render_template('login.html')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if current_user.is_authenticated:
         return redirect(url_for('home'))
-    
     if request.method == 'POST':
-        first_name = request.form.get('firstName')
-        last_name = request.form.get('lastName')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirmPassword')
-        
-        # Validation
-        if password != confirm_password:
+        if request.form.get('password') != request.form.get('confirmPassword'):
             flash('Passwords do not match', 'error')
             return render_template('signup.html')
-        
-        if User.query.filter_by(email=email).first():
+        if User.query.filter_by(email=request.form.get('email')).first():
             flash('Email already registered', 'error')
             return render_template('signup.html')
-        
-        # Create new user
-        user = User(
-            first_name=first_name,
-            last_name=last_name,
-            email=email
-        )
-        user.set_password(password)
-        
+        user = User(first_name=request.form.get('firstName'), last_name=request.form.get('lastName'), email=request.form.get('email'))
+        user.set_password(request.form.get('password'))
         db.session.add(user)
         db.session.commit()
-        
-        flash('Account created successfully! Please log in.', 'success')
+        flash('Account created! Please log in.', 'success')
         return redirect(url_for('login'))
-    
     return render_template('signup.html')
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
-    flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
-# API Routes for Applications
 @app.route('/api/applications', methods=['GET'])
 @login_required
 def get_applications():
-    applications = Application.query.filter_by(user_id=current_user.id).all()
-    return jsonify([app.to_dict() for app in applications])
+    return jsonify([app.to_dict() for app in Application.query.filter_by(user_id=current_user.id).all()])
 
 @app.route('/api/applications', methods=['POST'])
 @login_required
 def create_application():
     data = request.get_json()
-    
-    application = Application(
-        user_id=current_user.id,
-        company=data['company'],
-        position=data['position'],
-        date_applied=datetime.strptime(data['dateApplied'], '%Y-%m-%d').date(),
-        status=data['status'],
-        location=data.get('location', ''),
-        salary=data.get('salary', ''),
-        notes=data.get('notes', '')
-    )
-    
-    db.session.add(application)
+    app = Application(user_id=current_user.id, company=data['company'], position=data['position'],
+                     date_applied=datetime.strptime(data['dateApplied'], '%Y-%m-%d').date(),
+                     status=data['status'], location=data.get('location',''), salary=data.get('salary',''), notes=data.get('notes',''))
+    db.session.add(app)
     db.session.commit()
-    
-    return jsonify(application.to_dict()), 201
+    return jsonify(app.to_dict()), 201
 
 @app.route('/api/applications/<int:app_id>', methods=['PUT'])
 @login_required
 def update_application(app_id):
-    application = Application.query.filter_by(id=app_id, user_id=current_user.id).first_or_404()
+    app = Application.query.filter_by(id=app_id, user_id=current_user.id).first_or_404()
     data = request.get_json()
-    
-    application.company = data['company']
-    application.position = data['position']
-    application.date_applied = datetime.strptime(data['dateApplied'], '%Y-%m-%d').date()
-    application.status = data['status']
-    application.location = data.get('location', '')
-    application.salary = data.get('salary', '')
-    application.notes = data.get('notes', '')
-    
+    app.company = data['company']
+    app.position = data['position']
+    app.date_applied = datetime.strptime(data['dateApplied'], '%Y-%m-%d').date()
+    app.status = data['status']
+    app.location = data.get('location','')
+    app.salary = data.get('salary','')
+    app.notes = data.get('notes','')
     db.session.commit()
-    
-    return jsonify(application.to_dict())
+    return jsonify(app.to_dict())
 
 @app.route('/api/applications/<int:app_id>', methods=['DELETE'])
 @login_required
 def delete_application(app_id):
-    application = Application.query.filter_by(id=app_id, user_id=current_user.id).first_or_404()
-    
-    db.session.delete(application)
+    app = Application.query.filter_by(id=app_id, user_id=current_user.id).first_or_404()
+    db.session.delete(app)
     db.session.commit()
-    
     return '', 204
 
-# Export Routes
 @app.route('/export/csv')
 @login_required
 def export_csv():
-    """Export user's applications to CSV"""
-    applications = Application.query.filter_by(user_id=current_user.id).all()
-    
-    # Create CSV in memory
+    apps = Application.query.filter_by(user_id=current_user.id).all()
     output = io.StringIO()
     writer = csv.writer(output)
-    
-    # Write header
-    writer.writerow(['Company', 'Position', 'Date Applied', 'Status', 'Location', 'Salary', 'Notes', 'Created At'])
-    
-    # Write data
-    for app in applications:
-        writer.writerow([
-            app.company,
-            app.position,
-            app.date_applied.strftime('%Y-%m-%d'),
-            app.status,
-            app.location or '',
-            app.salary or '',
-            app.notes or '',
-            app.created_at.strftime('%Y-%m-%d %H:%M:%S')
-        ])
-    
-    # Create response
+    writer.writerow(['Company','Position','Date','Status','Location','Salary','Notes'])
+    for a in apps:
+        writer.writerow([a.company,a.position,a.date_applied.strftime('%Y-%m-%d'),a.status,a.location or '',a.salary or '',a.notes or ''])
     output.seek(0)
     response = make_response(output.getvalue())
-    response.headers['Content-Disposition'] = f'attachment; filename=job_applications_{datetime.now().strftime("%Y%m%d")}.csv'
+    response.headers['Content-Disposition'] = f'attachment; filename=applications_{datetime.now().strftime("%Y%m%d")}.csv'
     response.headers['Content-Type'] = 'text/csv'
-    
     return response
 
 @app.route('/export/pdf')
 @login_required
 def export_pdf():
-    """Export user's applications to PDF"""
-    applications = Application.query.filter_by(user_id=current_user.id).all()
-    
-    # Create PDF in memory
+    apps = Application.query.filter_by(user_id=current_user.id).all()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
-    elements = []
-    
-    # Styles
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#4f46e5'),
-        spaceAfter=30,
-    )
-    
-    # Title
-    title = Paragraph(f"Job Applications Report - {current_user.full_name}", title_style)
-    elements.append(title)
-    
-    # Date
-    date_text = Paragraph(f"Generated on {datetime.now().strftime('%B %d, %Y')}", styles['Normal'])
-    elements.append(date_text)
-    elements.append(Spacer(1, 0.5*inch))
-    
-    # Summary statistics
-    total = len(applications)
-    interviews = len([a for a in applications if a.status in ['Phone Screen', 'Interview Scheduled', 'Interviewed']])
-    offers = len([a for a in applications if a.status == 'Offer'])
-    
-    summary = Paragraph(f"<b>Summary:</b> {total} Total Applications | {interviews} Interviews | {offers} Offers", styles['Normal'])
-    elements.append(summary)
-    elements.append(Spacer(1, 0.3*inch))
-    
-    # Applications table
-    if applications:
-        data = [['Company', 'Position', 'Date Applied', 'Status']]
-        
-        for app in applications:
-            data.append([
-                app.company,
-                app.position,
-                app.date_applied.strftime('%Y-%m-%d'),
-                app.status
-            ])
-        
-        table = Table(data, colWidths=[2*inch, 2.5*inch, 1.5*inch, 1.5*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
-        ]))
-        
-        elements.append(table)
-    else:
-        elements.append(Paragraph("No applications found.", styles['Normal']))
-    
-    # Build PDF
-    doc.build(elements)
+    data = [['Company','Position','Date','Status']]
+    for a in apps:
+        data.append([a.company, a.position, a.date_applied.strftime('%Y-%m-%d'), a.status])
+    table = Table(data)
+    table.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black)]))
+    doc.build([table])
     buffer.seek(0)
-    
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=f'job_applications_{datetime.now().strftime("%Y%m%d")}.pdf',
-        mimetype='application/pdf'
-    )
+    return send_file(buffer, as_attachment=True, download_name=f'applications.pdf', mimetype='application/pdf')
 
-# Password Reset Routes
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    """Request password reset"""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
-    
     if request.method == 'POST':
-        email = request.form.get('email')
-        user = User.query.filter_by(email=email).first()
-        
+        user = User.query.filter_by(email=request.form.get('email')).first()
         if user:
-            # Generate reset token
-            serializer = get_serializer()
-            token = serializer.dumps(user.email, salt='password-reset-salt')
-            
-            # Generate reset URL
+            from itsdangerous import URLSafeTimedSerializer
+            s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+            token = s.dumps(user.email, salt='password-reset-salt')
             reset_url = url_for('reset_password', token=token, _external=True)
-            
-            # Send the email
-            email_sent = send_password_reset_email(user.email, reset_url)
-            
-            if email_sent:
-                flash('If an account exists with that email, a password reset link has been sent.', 'success')
+            if send_password_reset_email(user.email, reset_url):
+                flash('If account exists, reset link sent.', 'success')
             else:
-                flash('There was an error sending the email. Please try again later.', 'error')
+                flash('Error sending email.', 'error')
         else:
-            # Don't reveal if email exists or not (security best practice)
-            flash('If an account exists with that email, a password reset link has been sent.', 'success')
-        
+            flash('If account exists, reset link sent.', 'success')
         return redirect(url_for('login'))
-    
     return render_template('forgot_password.html')
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    """Reset password with token"""
     if current_user.is_authenticated:
         return redirect(url_for('home'))
-    
     try:
-        serializer = get_serializer()
-        email = serializer.loads(token, salt='password-reset-salt', max_age=3600)  # 1 hour expiry
+        from itsdangerous import URLSafeTimedSerializer
+        s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+        email = s.loads(token, salt='password-reset-salt', max_age=3600)
     except:
-        flash('The password reset link is invalid or has expired.', 'error')
+        flash('Invalid or expired link.', 'error')
         return redirect(url_for('forgot_password'))
-    
     if request.method == 'POST':
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirmPassword')
-        
-        if password != confirm_password:
+        if request.form.get('password') != request.form.get('confirmPassword'):
             flash('Passwords do not match', 'error')
             return render_template('reset_password.html', token=token)
-        
         user = User.query.filter_by(email=email).first()
         if user:
-            user.set_password(password)
+            user.set_password(request.form.get('password'))
             db.session.commit()
-            flash('Your password has been reset successfully. Please log in.', 'success')
+            flash('Password reset! Please log in.', 'success')
             return redirect(url_for('login'))
-        else:
-            flash('User not found.', 'error')
-            return redirect(url_for('forgot_password'))
-    
     return render_template('reset_password.html', token=token)
-
-@app.route('/change-password', methods=['GET', 'POST'])
-@login_required
-def change_password():
-    """Change password for logged-in user"""
-    if request.method == 'POST':
-        current_password = request.form.get('currentPassword')
-        new_password = request.form.get('newPassword')
-        confirm_password = request.form.get('confirmPassword')
-        
-        if not current_user.check_password(current_password):
-            flash('Current password is incorrect', 'error')
-            return render_template('change_password.html')
-        
-        if new_password != confirm_password:
-            flash('New passwords do not match', 'error')
-            return render_template('change_password.html')
-        
-        current_user.set_password(new_password)
-        db.session.commit()
-        flash('Your password has been changed successfully', 'success')
-        return redirect(url_for('home'))
-    
-    return render_template('change_password.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
